@@ -27,6 +27,7 @@ export default function PreviewPage() {
   const [selectedConfigId, setSelectedConfigId] = useState<string>('')
   const [regions, setRegions] = useState<Region[]>([])
   const [streamingState, setStreamingState] = useState<StreamingState>('idle')
+  const [targetHz, setTargetHz] = useState<number>(50)
   const [autoMapStatus, setAutoMapStatus] = useState<string>('')
   const [autoMapError, setAutoMapError] = useState<string>('')
   const [streamError, setStreamError] = useState<string>('')
@@ -90,7 +91,7 @@ export default function PreviewPage() {
     if (streamingState === 'idle') {
       if (!selectedConfigId) return
       try {
-        await startStreaming(selectedConfigId)
+        await startStreaming(selectedConfigId, targetHz)
         setStreamingState('streaming')
       } catch {
         setStreamError('Failed to start streaming.')
@@ -222,8 +223,8 @@ export default function PreviewPage() {
           ))}
       </div>
 
-      {/* Start/Stop toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      {/* Start/Stop toggle + update rate */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
         <button
           onClick={handleStartStop}
           disabled={!selectedConfigId && !isStreaming}
@@ -239,6 +240,19 @@ export default function PreviewPage() {
         >
           {isStreaming ? 'Stop Streaming' : 'Start Streaming'}
         </button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Update Rate:</span>
+          <input
+            type="range"
+            min={1}
+            max={100}
+            value={targetHz}
+            onChange={(e) => setTargetHz(Number(e.target.value))}
+            disabled={isStreaming}
+            style={{ width: '120px' }}
+          />
+          <span style={{ minWidth: '3.5rem' }}>{targetHz} Hz</span>
+        </label>
         {streamingState === 'streaming' && (
           <span style={{ color: '#2a7' }}>Streaming...</span>
         )}

@@ -52,11 +52,11 @@ export async function fetchConfigs(): Promise<Config[]> {
   return response.json()
 }
 
-export async function startStreaming(configId: string): Promise<void> {
+export async function startStreaming(configId: string, targetHz: number = 50): Promise<void> {
   const response = await fetch('/api/capture/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config_id: configId }),
+    body: JSON.stringify({ config_id: configId, target_hz: targetHz }),
   })
   if (!response.ok) {
     const error = new Error(`HTTP ${response.status}`) as Error & { status: number }
