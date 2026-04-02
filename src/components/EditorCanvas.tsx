@@ -5,7 +5,6 @@ import { usePreviewWS } from '@/hooks/usePreviewWS'
 import { useRegionStore } from '@/store/useRegionStore'
 import { normalize, denormalize, pointInPolygon, polygonArea } from '@/utils/geometry'
 import { createRegion, deleteRegion as deleteRegionAPI, fetchRegions, updateRegion as updateRegionAPI } from '@/api/regions'
-import { getLights, type Light } from '@/api/hue'
 import { RegionPolygon } from './RegionPolygon'
 
 export interface EditorCanvasProps {
@@ -60,9 +59,6 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
   const [rectStart, setRectStart] = useState<[number, number] | null>(null)
   const [rectPreview, setRectPreview] = useState<[number, number][] | null>(null)
 
-  // Light map: light_id -> light name for label display
-  const [lightMap, setLightMap] = useState<Record<string, string>>({})
-
   // Minimum region area from backend settings
   const [minRegionArea, setMinRegionArea] = useState(0.001)
 
@@ -75,17 +71,6 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
       .catch(console.error)
   }, [setRegions])
 
-  useEffect(() => {
-    getLights()
-      .then((lights: Light[]) => {
-        const map: Record<string, string> = {}
-        for (const l of lights) {
-          map[l.id] = l.name
-        }
-        setLightMap(map)
-      })
-      .catch(console.error)
-  }, [])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -202,7 +187,9 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
   async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
     const channelId = e.dataTransfer.getData('channelId')
+    const channelName = e.dataTransfer.getData('channelName')
     const lightId = e.dataTransfer.getData('lightId')
+    const configId = e.dataTransfer.getData('configId')
 
     if (!channelId && !lightId) return
 
@@ -223,14 +210,20 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
 
     if (!hit) return
 
-    // Use lightId for the region assignment (both gradient segments and non-gradient lights)
-    // channelId is available for future light_assignments writes
     const assignLightId = lightId || null
     if (!assignLightId) return
 
     try {
-      await updateRegionAPI(hit.id, { light_id: assignLightId })
-      updateRegionInStore(hit.id, { light_id: assignLightId })
+      const update: Parameters<typeof updateRegionAPI>[1] = {
+        light_id: assignLightId,
+        name: channelName || hit.name,
+      }
+      if (channelId && configId) {
+        update.channel_id = Number(channelId)
+        update.entertainment_config_id = configId
+      }
+      await updateRegionAPI(hit.id, update)
+      updateRegionInStore(hit.id, { light_id: assignLightId, name: update.name })
     } catch (err) {
       console.error('Failed to assign light to region:', err)
     }
@@ -267,7 +260,6 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
               isSelected={region.id === selectedId}
               stageWidth={width}
               stageHeight={height}
-              lightName={region.light_id ? lightMap[region.light_id] : undefined}
             />
           ))}
 

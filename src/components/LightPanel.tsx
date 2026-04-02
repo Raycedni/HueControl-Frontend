@@ -3,7 +3,6 @@ import { getLights, fetchConfigChannels, type Light, type ConfigChannel } from '
 import { fetchConfigs, fetchRegions, startStreaming, stopStreaming, clearAllAssignments, type Config } from '@/api/regions'
 import { useStatusStore } from '@/store/useStatusStore'
 import { useRegionStore } from '@/store/useRegionStore'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -103,14 +102,14 @@ export function LightPanel() {
   }, [lights, search])
 
   return (
-    <div className="flex flex-col gap-3 p-3 border-l h-full overflow-hidden">
+    <div className="flex flex-col gap-3 p-3 border-l border-white/[0.06] h-full overflow-hidden bg-white/[0.02]">
       {/* Streaming section */}
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">Streaming</h2>
+        <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Streaming</h2>
 
         {configs.length > 0 ? (
           <select
-            className="text-xs border rounded px-2 py-1 bg-background text-foreground"
+            className="text-xs rounded-lg px-2 py-1.5"
             value={selectedConfigId}
             onChange={(e) => setSelectedConfigId(e.target.value)}
             disabled={isStreaming}
@@ -127,39 +126,40 @@ export function LightPanel() {
 
         <Button
           size="sm"
-          variant={isStreaming ? 'destructive' : 'default'}
           onClick={handleToggleStreaming}
-          className="w-full"
+          className={
+            isStreaming
+              ? 'w-full bg-red-500/15 text-red-400 border-red-500/25 hover:bg-red-500/25'
+              : 'w-full bg-hue-orange/15 text-hue-amber border-hue-orange/25 hover:bg-hue-orange/25'
+          }
         >
           {isStreaming ? 'Stop' : 'Start'}
         </Button>
 
-        {streamError && <p className="text-xs text-destructive">{streamError}</p>}
+        {streamError && <p className="text-xs text-red-400">{streamError}</p>}
       </div>
 
-      <div className="border-t" />
+      <div className="h-px bg-white/[0.06]" />
 
       {/* Lights section */}
       <div className="flex flex-col gap-2 min-h-0 flex-1">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-muted-foreground">Lights</h2>
+          <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Lights</h2>
           <div className="flex items-center gap-2">
             <span
               className={cn(
-                'text-xs font-mono',
+                'text-[11px] font-mono',
                 assignedCount > 20
-                  ? 'text-red-500'
+                  ? 'text-red-400'
                   : assignedCount === 20
-                    ? 'text-yellow-500'
+                    ? 'text-hue-amber'
                     : 'text-muted-foreground',
               )}
             >
-              {assignedCount} / 20
+              {assignedCount}/20
             </span>
             <Button
-              size="sm"
-              variant="outline"
-              className="h-6 text-xs px-2"
+              size="xs"
               onClick={() => {
                 setError(null)
                 getLights()
@@ -171,22 +171,23 @@ export function LightPanel() {
                     .catch((err) => console.error('Failed to reload channels:', err))
                 }
               }}
+              className="bg-white/[0.04] text-muted-foreground border-white/[0.08] hover:bg-white/[0.08] hover:text-foreground h-5 text-[10px] px-1.5"
             >
               Sync
             </Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Drag a channel onto a region to assign it.</p>
+        <p className="text-[11px] text-muted-foreground/60">Drag a channel onto a region to assign it.</p>
 
         <input
           type="text"
           placeholder="Search lights..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-7 text-xs border rounded px-2 bg-background text-foreground w-full"
+          className="h-7 text-xs w-full !rounded-lg !px-2.5"
         />
 
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {error && <p className="text-xs text-red-400">{error}</p>}
 
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="flex flex-col gap-1">
@@ -200,25 +201,24 @@ export function LightPanel() {
               return (
                 <div key={light.id} className="flex flex-col gap-0.5">
                   {/* Light header */}
-                  <div className="flex items-center justify-between gap-1 rounded px-2 py-1 border bg-muted/30 select-none">
-                    <span className="text-xs font-semibold truncate">{light.name}</span>
+                  <div className="flex items-center justify-between gap-1 rounded-lg px-2.5 py-1.5 bg-white/[0.03] border border-white/[0.06] select-none">
+                    <span className="text-xs font-semibold truncate text-foreground">{light.name}</span>
                     <div className="flex items-center gap-1 shrink-0">
-                      {hasChannels && (
-                        <Badge variant="secondary" className="text-[10px]">
+                      {hasChannels ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-hue-orange/10 text-hue-amber/80">
                           {lightChannels.length} ch
-                        </Badge>
-                      )}
-                      {!hasChannels && (
-                        <Badge variant="outline" className="text-[10px]">
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/[0.04] text-muted-foreground/60">
                           not in config
-                        </Badge>
+                        </span>
                       )}
                     </div>
                   </div>
 
                   {/* Per-channel draggable rows */}
                   {hasChannels && (
-                    <div className="ml-3 border-l-2 border-primary/30 flex flex-col gap-0.5 pl-1">
+                    <div className="ml-3 border-l-2 border-hue-orange/20 flex flex-col gap-0.5 pl-1">
                       {lightChannels
                         .sort((a, b) => a.segment_index - b.segment_index)
                         .map((channel) => {
@@ -237,10 +237,10 @@ export function LightPanel() {
                                 e.dataTransfer.setData('configId', selectedConfigId)
                                 e.dataTransfer.effectAllowed = 'copy'
                               }}
-                              className="flex flex-col gap-0.5 rounded px-2 py-1 border cursor-grab active:opacity-60 hover:bg-accent select-none"
+                              className="flex flex-col gap-0.5 rounded-lg px-2.5 py-1.5 border border-white/[0.06] cursor-grab active:opacity-60 hover:bg-white/[0.04] select-none transition-colors"
                             >
                               <div className="flex items-center justify-between gap-1">
-                                <span className="text-[11px] font-medium">
+                                <span className="text-[11px] font-medium text-foreground/80">
                                   Seg {channel.segment_index + 1}/{channel.segment_count}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground font-mono">
@@ -248,7 +248,7 @@ export function LightPanel() {
                                 </span>
                               </div>
                               {segAssignedTo && (
-                                <span className="text-[10px] text-muted-foreground">
+                                <span className="text-[10px] text-hue-amber/60">
                                   Assigned: {segAssignedTo}
                                 </span>
                               )}
@@ -267,15 +267,14 @@ export function LightPanel() {
       {/* Assigned regions summary + clear button */}
       {regions.some((r) => r.light_id) && (
         <>
-          <div className="border-t" />
+          <div className="h-px bg-white/[0.06]" />
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-muted-foreground">Assignments</h2>
+              <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Assignments</h2>
               <Button
-                size="sm"
-                variant="outline"
-                className="h-6 text-xs px-2"
+                size="xs"
                 onClick={handleClearAssignments}
+                className="bg-white/[0.04] text-muted-foreground border-white/[0.08] hover:bg-red-500/10 hover:text-red-400 h-5 text-[10px] px-1.5"
               >
                 Clear all
               </Button>
@@ -286,8 +285,8 @@ export function LightPanel() {
                 const light = lights.find((l) => l.id === r.light_id)
                 return (
                   <div key={r.id} className="flex items-center justify-between text-xs">
-                    <span className="text-foreground truncate">{r.name}</span>
-                    <span className="text-muted-foreground truncate ml-1">
+                    <span className="text-foreground/80 truncate">{r.name}</span>
+                    <span className="text-hue-amber/50 truncate ml-1 text-[11px]">
                       {light?.name ?? r.light_id}
                     </span>
                   </div>

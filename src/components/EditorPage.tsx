@@ -45,7 +45,7 @@ export function EditorPage() {
   }, [])
 
   return (
-    <div className="flex flex-1 min-h-0">
+    <div className="flex flex-1 min-h-0 text-left">
       {/* Left: canvas area ~70% */}
       <div className="flex flex-col flex-[7]">
         <DrawingToolbar onDelete={handleEditorDelete} />

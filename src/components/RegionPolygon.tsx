@@ -12,8 +12,6 @@ interface RegionPolygonProps {
   stageWidth: number
   stageHeight: number
   color?: string
-  /** Display name of the assigned light (if any) */
-  lightName?: string
 }
 
 export function RegionPolygon({
@@ -22,7 +20,6 @@ export function RegionPolygon({
   stageWidth,
   stageHeight,
   color,
-  lightName,
 }: RegionPolygonProps) {
   const setSelectedId = useRegionStore((s) => s.setSelectedId)
   const setDrawingMode = useRegionStore((s) => s.setDrawingMode)
@@ -169,28 +166,16 @@ export function RegionPolygon({
         strokeWidth={2}
         listening
       />
-      {/* Show assigned light name when present, otherwise show region name in muted style */}
-      {lightName ? (
-        <Text
-          x={cx - 40}
-          y={cy - 8}
-          width={80}
-          text={lightName}
-          fontSize={12}
-          fill="yellow"
-          align="center"
-          listening={false}
-        />
-      ) : (
-        <Text
-          x={cx - 30}
-          y={cy - 8}
-          text={region.name}
-          fontSize={12}
-          fill="rgba(255,255,255,0.6)"
-          listening={false}
-        />
-      )}
+      <Text
+        x={cx - 50}
+        y={cy - 8}
+        width={100}
+        text={region.name}
+        fontSize={12}
+        fill={region.light_id ? 'yellow' : 'rgba(255,255,255,0.6)'}
+        align="center"
+        listening={false}
+      />
       {/* Vertex handles — only when selected */}
       {isSelected &&
         localPoints.map(([x, y], i) => (
