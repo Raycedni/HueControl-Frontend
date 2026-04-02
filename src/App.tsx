@@ -33,9 +33,11 @@ function App() {
         </button>
       </div>
 
-      {page === 'setup' && <PairingFlow />}
-      {page === 'preview' && <PreviewPage />}
-      {page === 'editor' && <EditorPage />}
+      <div className={`flex-1 min-h-0 flex flex-col ${page === 'editor' ? 'overflow-hidden' : 'overflow-auto'}`}>
+        {page === 'setup' && <PairingFlow />}
+        {page === 'preview' && <PreviewPage />}
+        {page === 'editor' && <EditorPage />}
+      </div>
 
       <StatusBar />
     </div>

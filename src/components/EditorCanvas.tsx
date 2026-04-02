@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Line, Circle } from 'react-konva'
-import useImage from 'use-image'
 import type Konva from 'konva'
 import { usePreviewWS } from '@/hooks/usePreviewWS'
 import { useRegionStore } from '@/store/useRegionStore'
@@ -18,7 +17,23 @@ export interface EditorCanvasProps {
 
 export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasProps) {
   const imgSrc = usePreviewWS(true)
-  const [previewImage] = useImage(imgSrc ?? '')
+
+  // Double-buffer: keep previous image visible while new one loads to prevent flicker
+  const [previewImage, setPreviewImage] = useState<HTMLImageElement | null>(null)
+  const loadingImgRef = useRef<HTMLImageElement | null>(null)
+
+  useEffect(() => {
+    if (!imgSrc) return
+    const img = new window.Image()
+    loadingImgRef.current = img
+    img.onload = () => {
+      // Only update if this is still the latest requested image
+      if (loadingImgRef.current === img) {
+        setPreviewImage(img)
+      }
+    }
+    img.src = imgSrc
+  }, [imgSrc])
 
   const stageRef = useRef<Konva.Stage>(null)
 
@@ -205,6 +220,7 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
     <div
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
+      style={{ background: '#000', display: 'inline-block' }}
     >
       <Stage
         ref={stageRef}

@@ -6,8 +6,7 @@ import { useRegionStore } from '@/store/useRegionStore'
 
 export function EditorPage() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [canvasWidth, setCanvasWidth] = useState(640)
-  const canvasHeight = Math.round(canvasWidth * (9 / 16)) // 16:9
+  const [canvasDims, setCanvasDims] = useState({ width: 640, height: 360 })
 
   const regions = useRegionStore((s) => s.regions)
   const assignedCount = regions.filter((r) => r.light_id !== null).length
@@ -16,23 +15,37 @@ export function EditorPage() {
     const container = containerRef.current
     if (!container) return
 
+    function fitCanvas(containerW: number, containerH: number) {
+      const w = Math.floor(containerW)
+      const h = Math.floor(containerH)
+      if (w <= 0 || h <= 0) return
+      // Fit 16:9 within available space
+      const byWidth = { width: w, height: Math.round(w * 9 / 16) }
+      if (byWidth.height <= h) {
+        setCanvasDims(byWidth)
+      } else {
+        // Height-constrained
+        const fitW = Math.round(h * 16 / 9)
+        setCanvasDims({ width: fitW, height: h })
+      }
+    }
+
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0]
       if (entry) {
-        const w = Math.floor(entry.contentRect.width)
-        setCanvasWidth(w)
+        fitCanvas(entry.contentRect.width, entry.contentRect.height)
       }
     })
     observer.observe(container)
 
     // Set initial size
-    setCanvasWidth(Math.floor(container.clientWidth))
+    fitCanvas(container.clientWidth, container.clientHeight)
 
     return () => observer.disconnect()
   }, [])
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex flex-1 min-h-0">
       {/* Left: canvas area ~70% */}
       <div className="flex flex-col flex-[7]">
         <DrawingToolbar onDelete={handleEditorDelete} />
@@ -41,10 +54,10 @@ export function EditorPage() {
             {assignedCount}/20 channels assigned — bridge will ignore excess channels.
           </div>
         )}
-        <div ref={containerRef} className="flex-1 overflow-hidden bg-black">
+        <div ref={containerRef} className="flex-1 overflow-hidden">
           <EditorCanvas
-            width={canvasWidth}
-            height={canvasHeight}
+            width={canvasDims.width}
+            height={canvasDims.height}
             onDeleteRequest={handleEditorDelete}
           />
         </div>

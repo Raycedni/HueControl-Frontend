@@ -33,10 +33,16 @@ export function RegionPolygon({
     denormalize(region.polygon as [number, number][], stageWidth, stageHeight),
   )
 
-  // Keep local points in sync when region changes from outside (e.g., body drag)
+  // Keep local points in sync when region changes OR stage dimensions change
   const prevRegionRef = useRef(region.polygon)
-  if (region.polygon !== prevRegionRef.current) {
+  const prevDimsRef = useRef({ w: stageWidth, h: stageHeight })
+  if (
+    region.polygon !== prevRegionRef.current ||
+    stageWidth !== prevDimsRef.current.w ||
+    stageHeight !== prevDimsRef.current.h
+  ) {
     prevRegionRef.current = region.polygon
+    prevDimsRef.current = { w: stageWidth, h: stageHeight }
     setLocalPoints(denormalize(region.polygon as [number, number][], stageWidth, stageHeight))
   }
 
