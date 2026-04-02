@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getLights, fetchConfigChannels, type Light, type ConfigChannel } from '@/api/hue'
-import { fetchConfigs, startStreaming, stopStreaming, type Config } from '@/api/regions'
+import { fetchConfigs, fetchRegions, startStreaming, stopStreaming, clearAllAssignments, type Config } from '@/api/regions'
 import { useStatusStore } from '@/store/useStatusStore'
 import { useRegionStore } from '@/store/useRegionStore'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ export function LightPanel() {
 
   const isStreaming = useStatusStore((s) => s.isStreaming)
   const regions = useRegionStore((s) => s.regions)
+  const setRegions = useRegionStore((s) => s.setRegions)
 
   useEffect(() => {
     getLights()
@@ -64,6 +65,16 @@ export function LightPanel() {
     }
   }
 
+  async function handleClearAssignments() {
+    try {
+      await clearAllAssignments()
+      const updated = await fetchRegions()
+      setRegions(updated)
+    } catch (err) {
+      console.error('Failed to clear assignments:', err)
+    }
+  }
+
   // Build a map of light_id -> region name for "assigned" display
   const assignedMap: Record<string, string> = {}
   for (const region of regions) {
@@ -78,14 +89,12 @@ export function LightPanel() {
   // Group channels by light_id
   const channelsByLight: Record<string, ConfigChannel[]> = {}
   for (const ch of channels) {
-    if (!channelsByLight[ch.light_id]) {
-      channelsByLight[ch.light_id] = []
+    const key = ch.light_id ?? `unknown-${ch.channel_id}`
+    if (!channelsByLight[key]) {
+      channelsByLight[key] = []
     }
-    channelsByLight[ch.light_id].push(ch)
+    channelsByLight[key].push(ch)
   }
-
-  // Build the set of light IDs that appear in channels
-  const channelLightIds = new Set(Object.keys(channelsByLight))
 
   const filteredLights = useMemo(() => {
     if (!search.trim()) return lights
@@ -145,7 +154,7 @@ export function LightPanel() {
                     : 'text-muted-foreground',
               )}
             >
-              {assignedCount} / 20 channels
+              {assignedCount} / 20
             </span>
             <Button
               size="sm"
@@ -167,7 +176,7 @@ export function LightPanel() {
             </Button>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Drag a light onto a region to assign it.</p>
+        <p className="text-xs text-muted-foreground">Drag a channel onto a region to assign it.</p>
 
         <input
           type="text"
@@ -186,20 +195,29 @@ export function LightPanel() {
             )}
             {filteredLights.map((light) => {
               const lightChannels = channelsByLight[light.id]
-              const isGradient = lightChannels && lightChannels.length > 1
+              const hasChannels = lightChannels && lightChannels.length > 0
 
-              if (isGradient) {
-                // Gradient light: show parent header + per-segment rows
-                return (
-                  <div key={light.id} className="flex flex-col gap-0.5">
-                    {/* Gradient parent header — not draggable */}
-                    <div className="flex items-center justify-between gap-1 rounded px-2 py-1 border bg-muted/30 select-none">
-                      <span className="text-xs font-semibold truncate">{light.name}</span>
-                      <Badge variant="secondary" className="text-[10px] shrink-0">
-                        gradient
-                      </Badge>
+              return (
+                <div key={light.id} className="flex flex-col gap-0.5">
+                  {/* Light header */}
+                  <div className="flex items-center justify-between gap-1 rounded px-2 py-1 border bg-muted/30 select-none">
+                    <span className="text-xs font-semibold truncate">{light.name}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {hasChannels && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {lightChannels.length} ch
+                        </Badge>
+                      )}
+                      {!hasChannels && (
+                        <Badge variant="outline" className="text-[10px]">
+                          not in config
+                        </Badge>
+                      )}
                     </div>
-                    {/* Per-segment draggable rows */}
+                  </div>
+
+                  {/* Per-channel draggable rows */}
+                  {hasChannels && (
                     <div className="ml-3 border-l-2 border-primary/30 flex flex-col gap-0.5 pl-1">
                       {lightChannels
                         .sort((a, b) => a.segment_index - b.segment_index)
@@ -213,16 +231,17 @@ export function LightPanel() {
                                 e.dataTransfer.setData('channelId', String(channel.channel_id))
                                 e.dataTransfer.setData(
                                   'channelName',
-                                  `${channel.light_name} - Seg ${channel.segment_index + 1}`,
+                                  `${light.name} [${channel.segment_index + 1}/${channel.segment_count}]`,
                                 )
                                 e.dataTransfer.setData('lightId', channel.light_id)
+                                e.dataTransfer.setData('configId', selectedConfigId)
                                 e.dataTransfer.effectAllowed = 'copy'
                               }}
                               className="flex flex-col gap-0.5 rounded px-2 py-1 border cursor-grab active:opacity-60 hover:bg-accent select-none"
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span className="text-[11px] font-medium">
-                                  Seg {channel.segment_index + 1}
+                                  Seg {channel.segment_index + 1}/{channel.segment_count}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground font-mono">
                                   ch {channel.channel_id}
@@ -237,49 +256,6 @@ export function LightPanel() {
                           )
                         })}
                     </div>
-                  </div>
-                )
-              }
-
-              // Non-gradient light: render as single draggable item
-              const assignedTo = assignedMap[light.id]
-              // Find single channel for this light (if available in channels data)
-              const singleChannel = lightChannels && lightChannels.length === 1 ? lightChannels[0] : null
-
-              return (
-                <div
-                  key={light.id}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('lightId', light.id)
-                    e.dataTransfer.setData('lightName', light.name)
-                    if (singleChannel) {
-                      e.dataTransfer.setData('channelId', String(singleChannel.channel_id))
-                      e.dataTransfer.setData('channelName', light.name)
-                    }
-                    e.dataTransfer.effectAllowed = 'copy'
-                  }}
-                  className="flex flex-col gap-0.5 rounded px-2 py-1.5 border cursor-grab active:opacity-60 hover:bg-accent select-none"
-                >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-semibold truncate">{light.name}</span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {!channelLightIds.has(light.id) && (
-                        <Badge variant="outline" className="text-[10px]">
-                          {light.type}
-                        </Badge>
-                      )}
-                      {channelLightIds.has(light.id) && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          {light.type}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  {assignedTo && (
-                    <span className="text-[10px] text-muted-foreground">
-                      Assigned: {assignedTo}
-                    </span>
                   )}
                 </div>
               )
@@ -288,12 +264,22 @@ export function LightPanel() {
         </div>
       </div>
 
-      {/* Assigned regions summary */}
+      {/* Assigned regions summary + clear button */}
       {regions.some((r) => r.light_id) && (
         <>
           <div className="border-t" />
           <div className="flex flex-col gap-1">
-            <h2 className="text-sm font-semibold text-muted-foreground">Assignments</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-muted-foreground">Assignments</h2>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 text-xs px-2"
+                onClick={handleClearAssignments}
+              >
+                Clear all
+              </Button>
+            </div>
             {regions
               .filter((r) => r.light_id)
               .map((r) => {

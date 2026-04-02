@@ -96,7 +96,13 @@ export async function createRegion(data: {
 
 export async function updateRegion(
   id: string,
-  data: { polygon?: number[][]; light_id?: string | null; name?: string },
+  data: {
+    polygon?: number[][]
+    light_id?: string | null
+    name?: string
+    channel_id?: number
+    entertainment_config_id?: string
+  },
 ): Promise<Region> {
   const response = await fetch(`/api/regions/${id}`, {
     method: 'PUT',
@@ -109,6 +115,17 @@ export async function updateRegion(
     throw error
   }
   return response.json()
+}
+
+export async function clearAllAssignments(): Promise<void> {
+  const response = await fetch('/api/regions/clear-assignments', {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`) as Error & { status: number }
+    error.status = response.status
+    throw error
+  }
 }
 
 export async function deleteAllRegions(): Promise<void> {
