@@ -59,6 +59,13 @@ export async function getBridgeStatus(): Promise<BridgeStatus> {
   return response.json()
 }
 
+export async function deleteBridge(): Promise<void> {
+  const response = await fetch('/api/hue/bridge', { method: 'DELETE' })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`)
+  }
+}
+
 export async function getEntertainmentConfigs(): Promise<EntertainmentConfig[]> {
   const response = await fetch('/api/hue/configs')
   if (!response.ok) {

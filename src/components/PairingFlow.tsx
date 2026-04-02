@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { pairBridge, getBridgeStatus, getEntertainmentConfigs } from '../api/hue'
+import { pairBridge, getBridgeStatus, getEntertainmentConfigs, deleteBridge } from '../api/hue'
 import type { BridgeStatus, EntertainmentConfig } from '../api/hue'
 import { Button } from './ui/button'
 
@@ -16,6 +16,7 @@ export default function PairingFlow() {
   const [bridgeInfo, setBridgeInfo] = useState<BridgeStatus | null>(null)
   const [configs, setConfigs] = useState<EntertainmentConfig[]>([])
   const [errorMessage, setErrorMessage] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     checkStatus()
@@ -43,6 +44,19 @@ export default function PairingFlow() {
       setConfigs(cfgs)
     } catch {
       // Non-critical; display empty list
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await deleteBridge()
+      setBridgeInfo(null)
+      setConfigs([])
+      setConfirmDelete(false)
+      setStep('unpaired')
+    } catch {
+      setErrorMessage('Failed to delete bridge.')
+      setStep('error')
     }
   }
 
@@ -174,6 +188,40 @@ export default function PairingFlow() {
               </div>
             </div>
           )}
+
+          <div className="mt-6 pt-4 border-t border-white/[0.06]">
+            {confirmDelete ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-red-400">Remove this bridge?</p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-white/10"
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30"
+                    onClick={handleDelete}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full border-red-500/20 text-red-400 hover:bg-red-500/10"
+                onClick={() => setConfirmDelete(true)}
+              >
+                Delete Bridge
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     )
