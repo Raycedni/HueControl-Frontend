@@ -33,6 +33,14 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
       }
     }
     img.src = imgSrc
+    return () => {
+      // Cancel pending load to prevent stale callbacks after unmount
+      if (loadingImgRef.current === img) {
+        img.onload = null
+        img.src = ''
+        loadingImgRef.current = null
+      }
+    }
   }, [imgSrc])
 
   const stageRef = useRef<Konva.Stage>(null)
