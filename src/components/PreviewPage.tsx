@@ -7,6 +7,7 @@ import {
   triggerAutoMap,
 } from '../api/regions'
 import type { Config, Region } from '../api/regions'
+import { usePreviewWS } from '../hooks/usePreviewWS'
 
 type StreamingState = 'idle' | 'streaming'
 
@@ -30,11 +31,10 @@ export default function PreviewPage() {
   const [autoMapError, setAutoMapError] = useState<string>('')
   const [streamError, setStreamError] = useState<string>('')
   const [imageError, setImageError] = useState(false)
-  const [snapshotTs, setSnapshotTs] = useState<number>(Date.now())
   const [imgDimensions, setImgDimensions] = useState<{ width: number; height: number } | null>(null)
 
   const imgRef = useRef<HTMLImageElement>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const previewSrc = usePreviewWS(true)
 
   // Load configs on mount
   useEffect(() => {
@@ -54,15 +54,6 @@ export default function PreviewPage() {
       })
   }, [])
 
-  // Refresh snapshot every 2 seconds
-  useEffect(() => {
-    intervalRef.current = setInterval(() => {
-      setSnapshotTs(Date.now())
-    }, 2000)
-    return () => {
-      if (intervalRef.current !== null) clearInterval(intervalRef.current)
-    }
-  }, [])
 
   function handleImageLoad() {
     setImageError(false)
@@ -115,7 +106,6 @@ export default function PreviewPage() {
   }
 
   const isStreaming = streamingState === 'streaming'
-  const snapshotSrc = `/api/capture/snapshot?t=${snapshotTs}`
 
   // Compute overlay style from polygon (top-left and bottom-right corners)
   function getOverlayStyle(region: Region, colorIndex: number): React.CSSProperties {
@@ -202,7 +192,7 @@ export default function PreviewPage() {
         ) : (
           <img
             ref={imgRef}
-            src={snapshotSrc}
+            src={previewSrc ?? ''}
             alt="Camera preview"
             onLoad={handleImageLoad}
             onError={handleImageError}
