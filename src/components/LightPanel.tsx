@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getLights, fetchConfigChannels, type Light, type ConfigChannel } from '@/api/hue'
 import { fetchConfigs, startStreaming, stopStreaming, type Config } from '@/api/regions'
 import { useStatusStore } from '@/store/useStatusStore'
 import { useRegionStore } from '@/store/useRegionStore'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -15,6 +14,7 @@ export function LightPanel() {
   const [channels, setChannels] = useState<ConfigChannel[]>([])
   const [error, setError] = useState<string | null>(null)
   const [streamError, setStreamError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   const isStreaming = useStatusStore((s) => s.isStreaming)
   const regions = useRegionStore((s) => s.regions)
@@ -87,8 +87,14 @@ export function LightPanel() {
   // Build the set of light IDs that appear in channels
   const channelLightIds = new Set(Object.keys(channelsByLight))
 
+  const filteredLights = useMemo(() => {
+    if (!search.trim()) return lights
+    const q = search.toLowerCase()
+    return lights.filter((l) => l.name.toLowerCase().includes(q))
+  }, [lights, search])
+
   return (
-    <div className="flex flex-col gap-3 p-3 border-l h-full">
+    <div className="flex flex-col gap-3 p-3 border-l h-full overflow-hidden">
       {/* Streaming section */}
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold text-muted-foreground">Streaming</h2>
@@ -163,14 +169,22 @@ export function LightPanel() {
         </div>
         <p className="text-xs text-muted-foreground">Drag a light onto a region to assign it.</p>
 
+        <input
+          type="text"
+          placeholder="Search lights..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-7 text-xs border rounded px-2 bg-background text-foreground w-full"
+        />
+
         {error && <p className="text-xs text-destructive">{error}</p>}
 
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <div className="flex flex-col gap-1">
             {lights.length === 0 && !error && (
               <p className="text-xs text-muted-foreground">Loading lights...</p>
             )}
-            {lights.map((light) => {
+            {filteredLights.map((light) => {
               const lightChannels = channelsByLight[light.id]
               const isGradient = lightChannels && lightChannels.length > 1
 
@@ -271,7 +285,7 @@ export function LightPanel() {
               )
             })}
           </div>
-        </ScrollArea>
+        </div>
       </div>
 
       {/* Assigned regions summary */}
