@@ -111,6 +111,17 @@ export async function updateRegion(
   return response.json()
 }
 
+export async function deleteAllRegions(): Promise<void> {
+  const response = await fetch('/api/regions', {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status}`) as Error & { status: number }
+    error.status = response.status
+    throw error
+  }
+}
+
 export async function deleteRegion(id: string): Promise<void> {
   const response = await fetch(`/api/regions/${id}`, {
     method: 'DELETE',

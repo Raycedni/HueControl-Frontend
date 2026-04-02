@@ -35,8 +35,11 @@ export function usePreviewWS(enabled: boolean): string | null {
         const blob = ev.data as Blob
         const url = URL.createObjectURL(blob)
 
-        if (prevUrlRef.current) {
-          URL.revokeObjectURL(prevUrlRef.current)
+        // Defer revoking the previous URL so double-buffered consumers
+        // can finish loading the new image before the old one is freed.
+        const oldUrl = prevUrlRef.current
+        if (oldUrl) {
+          setTimeout(() => URL.revokeObjectURL(oldUrl), 200)
         }
         prevUrlRef.current = url
         setImgSrc(url)
