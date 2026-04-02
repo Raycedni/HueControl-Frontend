@@ -3,7 +3,7 @@ import { Stage, Layer, Image as KonvaImage, Line, Circle } from 'react-konva'
 import type Konva from 'konva'
 import { usePreviewWS } from '@/hooks/usePreviewWS'
 import { useRegionStore } from '@/store/useRegionStore'
-import { normalize, denormalize, pointInPolygon } from '@/utils/geometry'
+import { normalize, denormalize, pointInPolygon, polygonArea } from '@/utils/geometry'
 import { createRegion, deleteRegion as deleteRegionAPI, fetchRegions, updateRegion as updateRegionAPI } from '@/api/regions'
 import { getLights, type Light } from '@/api/hue'
 import { RegionPolygon } from './RegionPolygon'
@@ -55,9 +55,16 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
   // Light map: light_id -> light name for label display
   const [lightMap, setLightMap] = useState<Record<string, string>>({})
 
-  // Load regions and lights on mount
+  // Minimum region area from backend settings
+  const [minRegionArea, setMinRegionArea] = useState(0.001)
+
+  // Load regions, lights, and settings on mount
   useEffect(() => {
     fetchRegions().then(setRegions).catch(console.error)
+    fetch('/api/regions/settings')
+      .then((r) => r.json())
+      .then((s: { min_region_area: number }) => setMinRegionArea(s.min_region_area))
+      .catch(console.error)
   }, [setRegions])
 
   useEffect(() => {
@@ -90,6 +97,11 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
   async function commitPolygon(pixelPoints: [number, number][]) {
     if (pixelPoints.length < 3) return
     const normalized = normalize(pixelPoints, width, height)
+    if (polygonArea(normalized) < minRegionArea) {
+      console.warn('Region too small, ignoring')
+      clearDrawing()
+      return
+    }
     const regionCount = useRegionStore.getState().regions.length
     try {
       const region = await createRegion({
