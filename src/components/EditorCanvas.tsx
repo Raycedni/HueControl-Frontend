@@ -113,10 +113,11 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
     if (!stage) return null
     const pos = stage.getPointerPosition()
     if (!pos) return null
-    return [pos.x, pos.y]
+    // Clamp to canvas bounds
+    return [Math.min(Math.max(pos.x, 0), width), Math.min(Math.max(pos.y, 0), height)]
   }
 
-  function handleStageClick(e: Konva.KonvaEventObject<MouseEvent>) {
+  function handleStageClick(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     // Deselect on empty stage click
     if (e.target === e.target.getStage()) {
       setSelectedId(null)
@@ -139,7 +140,7 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
     }
   }
 
-  function handleMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+  function handleMouseDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     if (drawingMode !== 'rectangle') return
     const pos = getPointerPos()
     if (!pos) return
@@ -148,7 +149,7 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
     e.cancelBubble = true
   }
 
-  function handleMouseMove(e: Konva.KonvaEventObject<MouseEvent>) {
+  function handleMouseMove(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     if (drawingMode !== 'rectangle' || !rectStart) return
     const pos = getPointerPos()
     if (!pos) return
@@ -163,7 +164,7 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
     e.cancelBubble = true
   }
 
-  async function handleMouseUp(e: Konva.KonvaEventObject<MouseEvent>) {
+  async function handleMouseUp(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     if (drawingMode !== 'rectangle' || !rectStart) return
     const pos = getPointerPos()
     if (!pos) return
@@ -233,16 +234,20 @@ export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasPro
     <div
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
-      style={{ background: '#000', display: 'inline-block' }}
+      style={{ background: '#000', display: 'inline-block', touchAction: 'none' }}
     >
       <Stage
         ref={stageRef}
         width={width}
         height={height}
         onClick={handleStageClick}
+        onTap={handleStageClick}
         onMouseDown={handleMouseDown}
+        onTouchStart={handleMouseDown}
         onMouseMove={handleMouseMove}
+        onTouchMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onTouchEnd={handleMouseUp}
       >
         {/* Layer 0: preview — no interaction */}
         <Layer listening={false}>

@@ -68,18 +68,108 @@ export function RegionPolygon({
     }, 400)
   }
 
-  function handleGroupClick(e: Konva.KonvaEventObject<MouseEvent>) {
+  /** Clamp a set of points so the entire polygon stays within [0, stageWidth] x [0, stageHeight] */
+  function clampPoints(pts: [number, number][]): [number, number][] {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const [x, y] of pts) {
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+    }
+    let dx = 0, dy = 0
+    if (minX < 0) dx = -minX
+    else if (maxX > stageWidth) dx = stageWidth - maxX
+    if (minY < 0) dy = -minY
+    else if (maxY > stageHeight) dy = stageHeight - maxY
+    if (dx === 0 && dy === 0) return pts
+    return pts.map(([x, y]) => [x + dx, y + dy])
+  }
+
+  function handleGroupClick(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     e.cancelBubble = true
     setSelectedId(region.id)
     setDrawingMode('select')
+  }
+
+  /** Collect snap edges (x and y values) from all other regions */
+  function getSnapEdges(): { xs: number[]; ys: number[] } {
+    const allRegions = useRegionStore.getState().regions
+    const xs: number[] = []
+    const ys: number[] = []
+    for (const r of allRegions) {
+      if (r.id === region.id) continue
+      const pts = denormalize(r.polygon as [number, number][], stageWidth, stageHeight)
+      for (const [x, y] of pts) {
+        xs.push(x)
+        ys.push(y)
+      }
+    }
+    // Also add canvas edges
+    xs.push(0, stageWidth)
+    ys.push(0, stageHeight)
+    return { xs, ys }
+  }
+
+  const SNAP_THRESHOLD = 8
+
+  /** Constrain group drag so the polygon never leaves the canvas; snap when Ctrl held */
+  function handleGroupDragBound(pos: { x: number; y: number }) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const [x, y] of localPoints) {
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x > maxX) maxX = x
+      if (y > maxY) maxY = y
+    }
+
+    let x = Math.min(Math.max(pos.x, -minX), stageWidth - maxX)
+    let y = Math.min(Math.max(pos.y, -minY), stageHeight - maxY)
+
+    // Snap edges to other zones when Ctrl is held
+    if (ctrlHeldRef.current) {
+      const { xs, ys } = getSnapEdges()
+      // Check each edge of this polygon (shifted by drag offset) against snap targets
+      const myEdgesX = [minX + x, maxX + x]
+      const myEdgesY = [minY + y, maxY + y]
+
+      let bestSnapX = Infinity
+      for (const ex of myEdgesX) {
+        for (const sx of xs) {
+          const d = sx - ex
+          if (Math.abs(d) < Math.abs(bestSnapX) && Math.abs(d) < SNAP_THRESHOLD) {
+            bestSnapX = d
+          }
+        }
+      }
+      if (bestSnapX !== Infinity) x += bestSnapX
+
+      let bestSnapY = Infinity
+      for (const ey of myEdgesY) {
+        for (const sy of ys) {
+          const d = sy - ey
+          if (Math.abs(d) < Math.abs(bestSnapY) && Math.abs(d) < SNAP_THRESHOLD) {
+            bestSnapY = d
+          }
+        }
+      }
+      if (bestSnapY !== Infinity) y += bestSnapY
+
+      // Re-clamp after snap
+      x = Math.min(Math.max(x, -minX), stageWidth - maxX)
+      y = Math.min(Math.max(y, -minY), stageHeight - maxY)
+    }
+
+    return { x, y }
   }
 
   function handleGroupDragEnd(e: Konva.KonvaEventObject<DragEvent>) {
     const dx = e.target.x()
     const dy = e.target.y()
 
-    // Bake offset into points
-    const newPoints: [number, number][] = localPoints.map(([x, y]) => [x + dx, y + dy])
+    // Bake offset into points and clamp to bounds
+    const shifted: [number, number][] = localPoints.map(([x, y]) => [x + dx, y + dy])
+    const newPoints = clampPoints(shifted)
 
     // Reset group position to avoid drift
     e.target.position({ x: 0, y: 0 })
@@ -128,17 +218,20 @@ export function RegionPolygon({
     return updated
   }
 
+  function clampVertex(x: number, y: number): [number, number] {
+    return [Math.min(Math.max(x, 0), stageWidth), Math.min(Math.max(y, 0), stageHeight)]
+  }
+
   function handleVertexDragMove(index: number, e: Konva.KonvaEventObject<DragEvent>) {
     e.cancelBubble = true
-    const newX = e.target.x()
-    const newY = e.target.y()
+    const [newX, newY] = clampVertex(e.target.x(), e.target.y())
+    e.target.position({ x: newX, y: newY })
     setLocalPoints((prev) => applyRectConstraint(index, newX, newY, prev))
   }
 
   function handleVertexDragEnd(index: number, e: Konva.KonvaEventObject<DragEvent>) {
     e.cancelBubble = true
-    const newX = e.target.x()
-    const newY = e.target.y()
+    const [newX, newY] = clampVertex(e.target.x(), e.target.y())
     const newPoints = applyRectConstraint(index, newX, newY, localPoints)
     setLocalPoints(newPoints)
     scheduleSave(newPoints)
@@ -151,11 +244,16 @@ export function RegionPolygon({
 
   const flatPoints = localPoints.flatMap(([x, y]) => [x, y])
   const fillColor = color ?? 'rgba(255,255,255,0.2)'
+  // Larger handles on touch devices
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
+  const handleRadius = isTouchDevice ? 12 : 6
 
   return (
     <Group
       draggable={isSelected}
       onClick={handleGroupClick}
+      onTap={handleGroupClick}
+      dragBoundFunc={handleGroupDragBound}
       onDragEnd={handleGroupDragEnd}
     >
       <Line
@@ -183,7 +281,7 @@ export function RegionPolygon({
             key={i}
             x={x}
             y={y}
-            radius={6}
+            radius={handleRadius}
             fill="white"
             draggable
             onDragStart={() => handleVertexDragStart(i)}

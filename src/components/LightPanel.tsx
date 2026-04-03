@@ -102,7 +102,7 @@ export function LightPanel() {
   }, [lights, search])
 
   return (
-    <div className="flex flex-col gap-3 p-3 border-l border-white/[0.06] h-full overflow-hidden bg-white/[0.02]">
+    <div className="flex flex-col gap-3 p-3 md:border-l border-white/[0.06] h-full overflow-hidden bg-white/[0.02] w-full">
       {/* Streaming section */}
       <div className="flex flex-col gap-2">
         <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Streaming</h2>

@@ -22,13 +22,13 @@ export function DrawingToolbar({ onDelete }: DrawingToolbarProps) {
     }
   }
 
-  const modeBtn = (mode: string, active: boolean) =>
+  const modeBtn = (_mode: string, active: boolean) =>
     active
       ? 'bg-hue-orange/15 text-hue-amber border-hue-orange/30 hover:bg-hue-orange/20'
       : 'bg-white/[0.03] text-muted-foreground border-white/[0.08] hover:bg-white/[0.06] hover:text-foreground'
 
   return (
-    <div className="flex gap-1.5 px-3 py-2 border-b border-white/[0.06] bg-white/[0.02]">
+    <div className="flex flex-wrap gap-1.5 px-3 py-2 border-b border-white/[0.06] bg-white/[0.02]">
       <Button
         className={modeBtn('rectangle', drawingMode === 'rectangle')}
         size="sm"

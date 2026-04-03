@@ -24,4 +24,10 @@ export default defineConfig({
       },
     },
   },
+  ssr: {
+    noExternal: true,
+  },
+  optimizeDeps: {
+    disabled: true,
+  },
 })

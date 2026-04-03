@@ -45,16 +45,16 @@ export function EditorPage() {
   }, [])
 
   return (
-    <div className="flex flex-1 min-h-0 text-left">
+    <div className="flex flex-col md:flex-row flex-1 min-h-0 text-left">
       {/* Left: canvas area ~70% */}
-      <div className="flex flex-col flex-[7]">
+      <div className="flex flex-col flex-1 md:flex-[7] min-h-0">
         <DrawingToolbar onDelete={handleEditorDelete} />
         {assignedCount > 20 && (
           <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs px-3 py-2 text-center">
             {assignedCount}/20 channels assigned — bridge will ignore excess channels.
           </div>
         )}
-        <div ref={containerRef} className="flex-1 overflow-hidden">
+        <div ref={containerRef} className="flex-1 overflow-hidden min-h-[200px]">
           <EditorCanvas
             width={canvasDims.width}
             height={canvasDims.height}
@@ -63,8 +63,8 @@ export function EditorPage() {
         </div>
       </div>
 
-      {/* Right: light panel ~30% */}
-      <div className="flex flex-[3] min-h-0 overflow-hidden">
+      {/* Right (desktop) / Bottom (mobile): light panel */}
+      <div className="flex md:flex-[3] min-h-0 overflow-hidden max-h-[40vh] md:max-h-none border-t md:border-t-0 border-white/[0.06]">
         <LightPanel />
       </div>
     </div>
