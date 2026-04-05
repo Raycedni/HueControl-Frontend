@@ -7,9 +7,17 @@ import { useRegionStore } from '@/store/useRegionStore'
 export function EditorPage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [canvasDims, setCanvasDims] = useState({ width: 640, height: 360 })
+  const [identityMode, setIdentityMode] = useState<string | null>(null)
 
   const regions = useRegionStore((s) => s.regions)
   const assignedCount = regions.filter((r) => r.light_id !== null).length
+
+  useEffect(() => {
+    fetch('/api/cameras')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data) setIdentityMode(data.identity_mode) })
+      .catch(() => {}) // Silently ignore — alert simply won't show
+  }, [])
 
   useEffect(() => {
     const container = containerRef.current
@@ -49,6 +57,11 @@ export function EditorPage() {
       {/* Left: canvas area ~70% */}
       <div className="flex flex-col flex-1 md:flex-[7] min-h-0">
         <DrawingToolbar onDelete={handleEditorDelete} />
+        {identityMode === 'degraded' && (
+          <div className="bg-amber-500/10 border border-amber-500/25 text-amber-400 text-xs px-3 py-2 text-center">
+            Device identity is limited to capture card name. Devices may be misidentified if multiple identical cards are connected.
+          </div>
+        )}
         {assignedCount > 20 && (
           <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400 text-xs px-3 py-2 text-center">
             {assignedCount}/20 channels assigned — bridge will ignore excess channels.
