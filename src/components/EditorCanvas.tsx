@@ -12,10 +12,11 @@ export interface EditorCanvasProps {
   height: number
   /** Called by keyboard shortcuts and toolbar delete — wired from EditorPage */
   onDeleteRequest?: () => void
+  device?: string
 }
 
-export function EditorCanvas({ width, height, onDeleteRequest }: EditorCanvasProps) {
-  const imgSrc = usePreviewWS(true)
+export function EditorCanvas({ width, height, onDeleteRequest, device }: EditorCanvasProps) {
+  const imgSrc = usePreviewWS(true, device)
 
   // Double-buffer: keep previous image visible while new one loads to prevent flicker
   const [previewImage, setPreviewImage] = useState<HTMLImageElement | null>(null)

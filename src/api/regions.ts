@@ -4,6 +4,7 @@ export interface Region {
   polygon: number[][]
   order_index: number
   light_id: string | null
+  camera_device: string | null
 }
 
 export interface Config {

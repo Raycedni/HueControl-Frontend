@@ -1,15 +1,32 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getLights, fetchConfigChannels, type Light, type ConfigChannel } from '@/api/hue'
-import { fetchConfigs, fetchRegions, startStreaming, stopStreaming, clearAllAssignments, type Config } from '@/api/regions'
+import { getLights, getEntertainmentConfigs, fetchConfigChannels, type Light, type ConfigChannel, type EntertainmentConfig } from '@/api/hue'
+import { fetchRegions, startStreaming, stopStreaming, clearAllAssignments } from '@/api/regions'
+import { putCameraAssignment, type CamerasResponse } from '@/api/cameras'
 import { useStatusStore } from '@/store/useStatusStore'
 import { useRegionStore } from '@/store/useRegionStore'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
-export function LightPanel() {
+interface LightPanelProps {
+  selectedConfigId: string
+  onConfigChange: (configId: string) => void
+  selectedDevice: string | undefined
+  onDeviceChange: (device: string | undefined) => void
+  camerasData: CamerasResponse | null
+  onCamerasRefresh: () => Promise<void>
+}
+
+export function LightPanel({
+  selectedConfigId,
+  onConfigChange,
+  selectedDevice,
+  onDeviceChange,
+  camerasData,
+  onCamerasRefresh,
+}: LightPanelProps) {
   const [lights, setLights] = useState<Light[]>([])
-  const [configs, setConfigs] = useState<Config[]>([])
-  const [selectedConfigId, setSelectedConfigId] = useState<string>('')
+  const [configs, setConfigs] = useState<EntertainmentConfig[]>([])
   const [channels, setChannels] = useState<ConfigChannel[]>([])
   const [error, setError] = useState<string | null>(null)
   const [streamError, setStreamError] = useState<string | null>(null)
@@ -27,11 +44,11 @@ export function LightPanel() {
         setError('Failed to load lights')
       })
 
-    fetchConfigs()
+    getEntertainmentConfigs()
       .then((cfgs) => {
         setConfigs(cfgs)
         if (cfgs.length > 0 && !selectedConfigId) {
-          setSelectedConfigId(cfgs[0].id)
+          onConfigChange(cfgs[0].id)
         }
       })
       .catch((err) => {
@@ -39,12 +56,51 @@ export function LightPanel() {
       })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Zone-health-driven camera initialization — D-06
+  useEffect(() => {
+    if (!camerasData || !selectedConfigId) return
+    const zoneEntry = camerasData.zone_health.find(
+      (zh) => zh.entertainment_config_id === selectedConfigId
+    )
+    if (zoneEntry && zoneEntry.device_path) {
+      onDeviceChange(zoneEntry.device_path)
+    } else {
+      onDeviceChange(undefined) // D-07: no auto-selection
+    }
+  }, [selectedConfigId, camerasData, onDeviceChange])
+
   useEffect(() => {
     if (!selectedConfigId) return
     fetchConfigChannels(selectedConfigId)
       .then(setChannels)
       .catch((err) => console.error('Failed to load channels:', err))
   }, [selectedConfigId])
+
+  async function handleCameraChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const devicePath = e.target.value
+    if (!devicePath) {
+      onDeviceChange(undefined)
+      return
+    }
+    const cam = camerasData?.devices.find((d) => d.device_path === devicePath)
+    if (!cam) return
+    onDeviceChange(cam.device_path)
+    // Auto-save assignment (D-05) — use stable_id for PUT, device_path for WS
+    if (selectedConfigId) {
+      try {
+        await putCameraAssignment(selectedConfigId, cam.stable_id, cam.display_name)
+      } catch (err) {
+        console.error('Failed to save camera assignment:', err)
+      }
+    }
+  }
+
+  // Compute disconnected state for the selected camera — D-10
+  const selectedCameraDisconnected = (() => {
+    if (!selectedDevice || !camerasData) return false
+    const cam = camerasData.devices.find((d) => d.device_path === selectedDevice)
+    return cam ? !cam.connected : false
+  })()
 
   async function handleToggleStreaming() {
     setStreamError(null)
@@ -103,26 +159,75 @@ export function LightPanel() {
 
   return (
     <div className="flex flex-col gap-3 p-3 md:border-l border-white/[0.06] h-full overflow-hidden bg-white/[0.02] w-full">
-      {/* Streaming section */}
+      {/* Zone (entertainment config) selector — D-02: top of panel */}
       <div className="flex flex-col gap-2">
-        <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Streaming</h2>
-
+        <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Zone</h2>
         {configs.length > 0 ? (
           <select
             className="text-xs rounded-lg px-2 py-1.5"
             value={selectedConfigId}
-            onChange={(e) => setSelectedConfigId(e.target.value)}
+            onChange={(e) => onConfigChange(e.target.value)}
             disabled={isStreaming}
           >
             {configs.map((cfg) => (
-              <option key={cfg.id} value={cfg.id}>
-                {cfg.name}
-              </option>
+              <option key={cfg.id} value={cfg.id}>{cfg.name}</option>
             ))}
           </select>
         ) : (
           <p className="text-xs text-muted-foreground">No entertainment configs</p>
         )}
+      </div>
+
+      <div className="h-px bg-white/[0.06]" />
+
+      {/* Camera selector — D-01: in sidebar, D-02: below zone */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Camera</h2>
+            {selectedCameraDisconnected && (
+              <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5">
+                Disconnected
+              </Badge>
+            )}
+          </div>
+          <button
+            onClick={onCamerasRefresh}
+            className="p-0.5 text-muted-foreground hover:text-foreground"
+            title="Refresh camera list"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+        <select
+          className="text-xs rounded-lg px-2 py-1.5"
+          value={selectedDevice ?? ''}
+          onChange={handleCameraChange}
+          onFocus={onCamerasRefresh}
+          disabled={!camerasData?.cameras_available}
+        >
+          {!camerasData?.cameras_available ? (
+            <option value="">No cameras</option>
+          ) : (
+            <>
+              <option value="">Select camera...</option>
+              {camerasData.devices.filter((d) => d.connected).map((d) => (
+                <option key={d.device_path} value={d.device_path}>
+                  {d.display_name} ({d.device_path})
+                </option>
+              ))}
+            </>
+          )}
+        </select>
+      </div>
+
+      <div className="h-px bg-white/[0.06]" />
+
+      {/* Streaming section */}
+      <div className="flex flex-col gap-2">
+        <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Streaming</h2>
 
         <Button
           size="sm"

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 
-export function usePreviewWS(enabled: boolean): string | null {
+export function usePreviewWS(enabled: boolean, device?: string): string | null {
   const [imgSrc, setImgSrc] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const prevUrlRef = useRef<string | null>(null)
   const destroyedRef = useRef(false)
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !device) {
       destroyedRef.current = true
       if (wsRef.current) {
         wsRef.current.close()
@@ -27,7 +27,7 @@ export function usePreviewWS(enabled: boolean): string | null {
     function connect() {
       if (destroyedRef.current) return
 
-      const ws = new WebSocket(`ws://${location.host}/ws/preview`)
+      const ws = new WebSocket(`ws://${location.host}/ws/preview?device=${encodeURIComponent(device!)}`)
       ws.binaryType = 'blob'
       wsRef.current = ws
 
@@ -72,7 +72,7 @@ export function usePreviewWS(enabled: boolean): string | null {
         prevUrlRef.current = null
       }
     }
-  }, [enabled])
+  }, [enabled, device])
 
   return imgSrc
 }
