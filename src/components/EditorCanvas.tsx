@@ -6,6 +6,15 @@ import { useRegionStore } from '@/store/useRegionStore'
 import { normalize, denormalize, pointInPolygon, polygonArea } from '@/utils/geometry'
 import { createRegion, deleteRegion as deleteRegionAPI, fetchRegions, updateRegion as updateRegionAPI } from '@/api/regions'
 import { RegionPolygon } from './RegionPolygon'
+import {
+  upsertWledAssignment,
+  listWledAssignments,
+  getWledDevices,
+  listSegments,
+  type WledAssignment,
+  type WledSegment,
+} from '@/api/wled'
+import { RegionOrientationPopover } from './Editor/RegionOrientationPopover'
 
 export interface EditorCanvasProps {
   width: number
@@ -14,9 +23,11 @@ export interface EditorCanvasProps {
   onDeleteRequest?: () => void
   device?: string
   previewEnabled?: boolean
+  /** Entertainment config currently active — used for WLED assignment upsert + popover */
+  selectedConfigId?: string | null
 }
 
-export function EditorCanvas({ width, height, onDeleteRequest, device, previewEnabled = true }: EditorCanvasProps) {
+export function EditorCanvas({ width, height, onDeleteRequest, device, previewEnabled = true, selectedConfigId = null }: EditorCanvasProps) {
   const imgSrc = usePreviewWS(previewEnabled, device)
 
   // Double-buffer: keep previous image visible while new one loads to prevent flicker
@@ -45,6 +56,7 @@ export function EditorCanvas({ width, height, onDeleteRequest, device, previewEn
   }, [imgSrc])
 
   const stageRef = useRef<Konva.Stage>(null)
+  const canvasContainerRef = useRef<HTMLDivElement>(null)
 
   const regions = useRegionStore((s) => s.regions)
   const selectedId = useRegionStore((s) => s.selectedId)
@@ -56,6 +68,58 @@ export function EditorCanvas({ width, height, onDeleteRequest, device, previewEn
   const appendPoint = useRegionStore((s) => s.appendPoint)
   const clearDrawing = useRegionStore((s) => s.clearDrawing)
   const updateRegionInStore = useRegionStore((s) => s.updateRegion)
+
+  const setWledAssignments = useRegionStore((s) => s.setWledAssignments)
+  const [segsByDevice, setSegsByDevice] = useState<Record<string, WledSegment[]>>({})
+
+  // Phase 19.1: hydrate useRegionStore.wledAssignments + segsByDevice on
+  // mount + when config changes. segsByDevice powers the popover's segment
+  // metadata lookup (chip name + chip color). Per D-09 the chip color comes
+  // from seg.seg_index directly — no per-device sort-position resolver needed.
+  useEffect(() => {
+    if (!selectedConfigId) {
+      setWledAssignments({})
+      setSegsByDevice({})
+      return
+    }
+    let alive = true
+    void (async () => {
+      try {
+        const [assignmentsResp, devicesResp] = await Promise.all([
+          listWledAssignments(selectedConfigId),
+          getWledDevices(),
+        ])
+        if (!alive) return
+
+        const byRegion: Record<string, WledAssignment[]> = {}
+        for (const a of assignmentsResp.assignments) {
+          if (!byRegion[a.region_id]) byRegion[a.region_id] = []
+          byRegion[a.region_id].push(a)
+        }
+        setWledAssignments(byRegion)
+
+        // Fetch each device's seg cache in parallel (D-18, pure cache read).
+        const segEntries = await Promise.all(
+          devicesResp.devices.map(async (d) => {
+            try {
+              const resp = await listSegments(d.id)
+              return [d.id, resp.segments] as const
+            } catch (err) {
+              console.error(`Failed to load segments for device ${d.id}:`, err)
+              return [d.id, [] as WledSegment[]] as const
+            }
+          }),
+        )
+        if (!alive) return
+        setSegsByDevice(Object.fromEntries(segEntries))
+      } catch (err) {
+        console.error('Failed to load WLED assignments / segments:', err)
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [selectedConfigId, setWledAssignments])
 
   // Rectangle drawing state
   const [rectStart, setRectStart] = useState<[number, number] | null>(null)
@@ -189,6 +253,76 @@ export function EditorCanvas({ width, height, onDeleteRequest, device, previewEn
 
   async function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
+
+    // Phase 19.1 D-13: wledDeviceId is the new discriminator; seg_index is
+    // positional. Both must be present (alongside entertainment_config_id) or
+    // the drop is rejected. Explicit return below prevents the Hue branch
+    // from running for WLED drops.
+    const wledDeviceId = e.dataTransfer.getData('wledDeviceId')
+    if (wledDeviceId) {
+      const segIndexStr = e.dataTransfer.getData('seg_index')
+      const entertainmentConfigId = e.dataTransfer.getData('entertainment_config_id')
+      const wledDeviceName = e.dataTransfer.getData('wledDeviceName')
+      const wledSegName = e.dataTransfer.getData('wledSegName')
+      if (!segIndexStr || !entertainmentConfigId) {
+        console.error('WLED drop missing seg_index or entertainment_config_id')
+        return
+      }
+      const segIndex = Number(segIndexStr)
+      if (!Number.isFinite(segIndex)) {
+        console.error('WLED drop seg_index is not a number:', segIndexStr)
+        return
+      }
+      const stage = stageRef.current
+      if (!stage) return
+      stage.setPointersPositions(e)
+      const pos = stage.getPointerPosition()
+      if (!pos) return
+      const currentRegions = useRegionStore.getState().regions
+      const hit = currentRegions.find((region) => {
+        const pixelPolygon = denormalize(region.polygon as [number, number][], width, height)
+        return pointInPolygon([pos.x, pos.y], pixelPolygon)
+      })
+      if (!hit) return
+      try {
+        await upsertWledAssignment({
+          region_id: hit.id,
+          wled_device_id: wledDeviceId,
+          seg_index: segIndex,
+          entertainment_config_id: entertainmentConfigId,
+        })
+        // Rename the region to "[DEVICE] - [SEGMENT]" so the canvas label and
+        // LightPanel WLED chips reflect the assignment without a page reload.
+        // Mutating region.name also bumps the regions array reference, which
+        // re-fires the LightPanel hydration effect that builds the
+        // wledAssignmentsBySeg map.
+        if (wledDeviceName && wledSegName) {
+          const newName = `${wledDeviceName} - ${wledSegName}`
+          if (newName !== hit.name) {
+            try {
+              await updateRegionAPI(hit.id, { name: newName })
+              updateRegionInStore(hit.id, { name: newName })
+            } catch (err) {
+              console.error('Failed to rename region after WLED assignment:', err)
+            }
+          }
+        }
+        // Refresh assignments + surface the popover for the dropped-on region.
+        const resp = await listWledAssignments(entertainmentConfigId)
+        const byRegion: Record<string, WledAssignment[]> = {}
+        for (const a of resp.assignments) {
+          if (!byRegion[a.region_id]) byRegion[a.region_id] = []
+          byRegion[a.region_id].push(a)
+        }
+        useRegionStore.getState().setWledAssignments(byRegion)
+        useRegionStore.getState().setSelectedId(hit.id)
+      } catch (err) {
+        console.error('Failed to assign WLED segment to region:', err)
+      }
+      return  // CRITICAL: prevent fall-through to the Hue branch.
+    }
+
+    // EXISTING HUE BRANCH BELOW - byte-identical to the pre-Phase-19 code.
     const channelId = e.dataTransfer.getData('channelId')
     const channelName = e.dataTransfer.getData('channelName')
     const lightId = e.dataTransfer.getData('lightId')
@@ -199,12 +333,10 @@ export function EditorCanvas({ width, height, onDeleteRequest, device, previewEn
     const stage = stageRef.current
     if (!stage) return
 
-    // Update Konva pointer position from the DOM drag event
     stage.setPointersPositions(e)
     const pos = stage.getPointerPosition()
     if (!pos) return
 
-    // Find which region contains the drop point (in pixel space)
     const currentRegions = useRegionStore.getState().regions
     const hit = currentRegions.find((region) => {
       const pixelPolygon = denormalize(region.polygon as [number, number][], width, height)
@@ -234,6 +366,7 @@ export function EditorCanvas({ width, height, onDeleteRequest, device, previewEn
 
   return (
     <div
+      ref={canvasContainerRef}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
       style={{ background: '#000', display: 'inline-block', touchAction: 'none' }}
@@ -308,6 +441,15 @@ export function EditorCanvas({ width, height, onDeleteRequest, device, previewEn
           )}
         </Layer>
       </Stage>
+      {selectedConfigId && (
+        <RegionOrientationPopover
+          canvasWidth={width}
+          canvasHeight={height}
+          canvasContainerEl={canvasContainerRef.current}
+          selectedConfigId={selectedConfigId}
+          segsByDevice={segsByDevice}
+        />
+      )}
     </div>
   )
 }
