@@ -400,6 +400,7 @@ export function EditorCanvas({ width, height, onDeleteRequest, device, previewEn
               isSelected={region.id === selectedId}
               stageWidth={width}
               stageHeight={height}
+              segsByDevice={segsByDevice}
             />
           ))}
 

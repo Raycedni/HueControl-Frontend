@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 /node_modules.bak/*
+/test-results/wled-segments-Phase-19-1-W-8a26a-DeviceId-seg-index-per-D-13-chromium/error-context.md
+/test-results/wled-segments-Phase-19-1-W-759b0-m-refresh-response-stubbed--chromium/error-context.md
+/test-results/wled-segments-Phase-19-1-W-ee2a2-nts-fit-to-width-per-device-chromium/error-context.md
+/test-results/.last-run.json
